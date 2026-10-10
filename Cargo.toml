@@ -1,6 +1,9 @@
 [package]
 name = "faster_konaste"
 version = "0.1.0"
+authors = ["WenniDev"]
+license = "MIT"
+readme = "README.md"
 edition = "2024"
 
 [lib]
