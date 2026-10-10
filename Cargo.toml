@@ -1,0 +1,21 @@
+[package]
+name = "faster_konaste"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy"] }
+sha2 = "0.10"
+bon = "3"
+thiserror = "2"
+tokio-util = "0.7"
+windows-sys = { version = "0.61", features = [
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+] }
