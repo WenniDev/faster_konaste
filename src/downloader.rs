@@ -43,6 +43,10 @@ pub struct ParallelDownloader {
     #[builder(default)]
     progress: Arc<AtomicU64>,
 
+    /// Bytes received from the network, skipped files excluded and retries included
+    #[builder(default)]
+    received: Arc<AtomicU64>,
+
     #[builder(default)]
     cancellation_token: CancellationToken,
 }
@@ -96,6 +100,7 @@ impl ParallelDownloader {
             let temp_dir = self.temp_dir.clone();
             let retries = self.retries;
             let progress = self.progress.clone();
+            let received = self.received.clone();
             let cancellation_token = self.cancellation_token.clone();
 
             let handle = tokio::spawn(async move {
@@ -106,7 +111,7 @@ impl ParallelDownloader {
                     _ = cancellation_token.cancelled() => {
                         Ok(Fetched { status: Status::Cancelled, fingerprint: None })
                     }
-                    result = file.fetch(&client, &install_dir, &temp_dir, retries, &progress) => {
+                    result = file.fetch(&client, &install_dir, &temp_dir, retries, &progress, &received) => {
                         if let Err(err) = &result {
                             log!("Failed to fetch {}: {}", file.path, err);
                             cancellation_token.cancel();
@@ -135,6 +140,10 @@ impl ParallelDownloader {
         self.progress.clone()
     }
 
+    pub fn received(&self) -> Arc<AtomicU64> {
+        self.received.clone()
+    }
+
     pub fn cancellation_token(&self) -> CancellationToken {
         self.cancellation_token.clone()
     }
@@ -148,6 +157,7 @@ impl FileResource {
         temp_dir: &Path,
         retries: usize,
         progress: &AtomicU64,
+        received: &AtomicU64,
     ) -> Result<Fetched, Error> {
         let size = self.size.max(0) as u64;
 
@@ -167,7 +177,7 @@ impl FileResource {
         let mut attempt = 0;
         let fingerprint = loop {
             match self
-                .download(client, &temp_path, progress, &mut reported)
+                .download(client, &temp_path, progress, received, &mut reported)
                 .await
             {
                 Ok(fingerprint) => break fingerprint,
@@ -196,6 +206,7 @@ impl FileResource {
         client: &Client,
         temp_path: &Path,
         progress: &AtomicU64,
+        received_total: &AtomicU64,
         reported: &mut u64,
     ) -> Result<Fingerprint, Error> {
         let mut response = client.get(&self.url).send().await?.error_for_status()?;
@@ -206,6 +217,7 @@ impl FileResource {
         while let Some(chunk) = response.chunk().await? {
             hasher.update(&chunk);
             file.write_all(&chunk).await?;
+            received_total.fetch_add(chunk.len() as u64, Ordering::Relaxed);
 
             // Skip bytes already reported by a previous attempt
             received += chunk.len() as u64;

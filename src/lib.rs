@@ -5,6 +5,7 @@ mod hook;
 mod logger;
 mod pattern;
 mod resources;
+mod task_text;
 mod updater;
 
 use std::ffi::c_void;

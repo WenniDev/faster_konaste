@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     ffi::{CString, c_void},
     fmt::{Debug, Formatter},
     path::{Path, PathBuf},
@@ -21,6 +21,7 @@ use crate::{
     downloader::sha256,
     hook, log, logger,
     pattern::{self, Pattern},
+    task_text,
 };
 
 /// Prologue of `Updater::StateFuncDiffWait`, up to `if (file_count <= 0)`
@@ -200,6 +201,11 @@ const ERROR_DOWNLOAD: i32 = 0xa;
 
 const CONCURRENCY_VAR: &str = "KONASTE_DL_CONCURRENCY";
 
+/// Period over which the displayed download speed is averaged
+const SPEED_WINDOW: Duration = Duration::from_secs(3);
+/// Shortest period needed before showing a speed
+const MIN_SPEED_WINDOW: Duration = Duration::from_millis(500);
+
 type SetError = unsafe extern "system" fn(*mut u8, i32, i32);
 type ProgressInstance = unsafe extern "system" fn() -> *mut c_void;
 type ProgressAdd = unsafe extern "system" fn(*mut c_void, i32, i64) -> i64;
@@ -255,6 +261,12 @@ pub fn install() -> Result<(), Error> {
         )?;
     }
     log!("Hooked Updater::StateFuncDiffWait, Updater::StateFuncDownloadWait and FileSumCheck");
+
+    // The download works without the speed
+    match unsafe { task_text::install(image_base) } {
+        Ok(()) => log!("Hooked the TASK percentage for the download speed"),
+        Err(err) => log!("Failed to hook the TASK percentage: {}", err),
+    }
 
     Ok(())
 }
@@ -406,6 +418,10 @@ struct Job {
     tmps: Vec<CString>,
     progress: Arc<AtomicU64>,
     reported: u64,
+    /// Bytes received from the network, for the download speed
+    received: Arc<AtomicU64>,
+    /// When and how many bytes were received, over the last `SPEED_WINDOW`
+    samples: VecDeque<(Instant, u64)>,
     cancellation_token: CancellationToken,
     handle: JoinHandle<Result<Vec<Fetched>, Error>>,
 }
@@ -460,6 +476,7 @@ impl Job {
         log!("Downloading {} files with {:?}", files.len(), downloader);
 
         let progress = downloader.progress();
+        let received = downloader.received();
         let cancellation_token = downloader.cancellation_token();
         let handle = std::thread::spawn(move || {
             let client = Client::builder()
@@ -475,6 +492,8 @@ impl Job {
             tmps,
             progress,
             reported: 0,
+            received,
+            samples: VecDeque::new(),
             cancellation_token,
             handle,
         })
@@ -486,9 +505,34 @@ impl Job {
             unsafe { add_progress(PROGRESS_SLOT_DOWNLOAD, (progress - self.reported) as i64) };
             self.reported = progress;
         }
+        self.update_speed();
+    }
+
+    fn update_speed(&mut self) {
+        let now = Instant::now();
+        self.samples
+            .push_back((now, self.received.load(Ordering::Relaxed)));
+        while self
+            .samples
+            .front()
+            .is_some_and(|(at, _)| now - *at > SPEED_WINDOW)
+        {
+            self.samples.pop_front();
+        }
+
+        let speed = match (self.samples.front(), self.samples.back()) {
+            (Some(&(first_at, first)), Some(&(last_at, last)))
+                if last_at - first_at >= MIN_SPEED_WINDOW =>
+            {
+                Some((last - first) as f64 / (last_at - first_at).as_secs_f64())
+            }
+            _ => None,
+        };
+        task_text::set_speed(speed);
     }
 
     unsafe fn finish(self, updater: *mut u8) {
+        task_text::set_speed(None);
         let result = self
             .handle
             .join()

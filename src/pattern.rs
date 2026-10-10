@@ -22,12 +22,20 @@ impl Pattern {
     }
 
     pub fn find(&self, haystack: &[u8]) -> Option<usize> {
-        haystack.windows(self.bytes.len()).position(|window| {
-            window
-                .iter()
-                .zip(&self.bytes)
-                .all(|(byte, expected)| expected.is_none_or(|expected| *byte == expected))
-        })
+        self.find_all(haystack).next()
+    }
+
+    pub fn find_all<'a>(&'a self, haystack: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
+        haystack
+            .windows(self.bytes.len())
+            .enumerate()
+            .filter(|(_, window)| {
+                window
+                    .iter()
+                    .zip(&self.bytes)
+                    .all(|(byte, expected)| expected.is_none_or(|expected| *byte == expected))
+            })
+            .map(|(offset, _)| offset)
     }
 
     pub fn find_unique(&self, haystack: &[u8]) -> Option<usize> {
