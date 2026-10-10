@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: windows-latest
+    name: Build
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build
+      run: cargo build --release --target x86_64-pc-windows-msvc
+
+    - name: Test
+      run: cargo test --release --target x86_64-pc-windows-msvc
+
+    - name: Name it d3d9.dll
+      run: mv target/x86_64-pc-windows-msvc/release/faster_konaste.dll target/x86_64-pc-windows-msvc/release/d3d9.dll
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v7
+      with:
+        archive: false
+        path: target/x86_64-pc-windows-msvc/release/d3d9.dll
+
+  release:
+    needs: build
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: artifacts/d3d9.dll
