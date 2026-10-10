@@ -21,3 +21,5 @@ Little Konaste updater hook to download your game updates faster.
 ## License
 
 MIT
+
+*Based on [konaste_downloader](https://github.com/adamaq01/konaste_downloader).*
