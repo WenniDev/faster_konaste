@@ -4,6 +4,7 @@ mod error;
 mod hook;
 mod logger;
 mod pattern;
+mod proxy;
 mod resources;
 mod task_text;
 mod updater;

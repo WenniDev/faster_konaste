@@ -199,8 +199,6 @@ const PROGRESS_SLOT_DOWNLOAD: i32 = 3;
 const ERROR_DURATION: i32 = 0xbb8;
 const ERROR_DOWNLOAD: i32 = 0xa;
 
-const CONCURRENCY_VAR: &str = "KONASTE_DL_CONCURRENCY";
-
 /// Period over which the displayed download speed is averaged
 const SPEED_WINDOW: Duration = Duration::from_secs(3);
 /// Shortest period needed before showing a speed
@@ -471,7 +469,6 @@ impl Job {
         let downloader = ParallelDownloader::builder()
             .install_dir(install_dir)
             .temp_dir(temp_dir)
-            .concurrency(concurrency())
             .build();
         log!("Downloading {} files with {:?}", files.len(), downloader);
 
@@ -595,14 +592,6 @@ impl Job {
         );
         unsafe { set_next_state(updater, functions().state_install_init) };
     }
-}
-
-fn concurrency() -> usize {
-    std::env::var(CONCURRENCY_VAR)
-        .ok()
-        .and_then(|value| value.parse().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(8)
 }
 
 fn install_dir() -> &'static Path {
