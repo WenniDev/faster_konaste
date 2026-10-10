@@ -16,7 +16,7 @@ Little Konaste updater hook to download your game updates faster.
 
 ## Tips
 
-- Loading other DLLs too? Rename it `faster_konaste.dll` and use [konasute_chainload](https://github.com/Radioo/konasute_chainload)
+- Loading other DLLs too? Rename it `faster_konaste.dll` and use [d3d9_chainload](https://github.com/adamaq01/d3d9_chainload)
 
 ## License
 
